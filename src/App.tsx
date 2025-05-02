@@ -1,6 +1,7 @@
 
 import './App.css'
 import {TodoForm} from "./components /Todo-form.tsx";
+import {TodoList} from "./components /TodoList.tsx";
 
 function App() {
 
@@ -11,6 +12,7 @@ function App() {
         </header>
         <div className="flex flex-col items-center bg-gray-200 rounded-lg p-2 w-full h-screen">
             <TodoForm />
+            <TodoList />
         </div>
     </>
   )
