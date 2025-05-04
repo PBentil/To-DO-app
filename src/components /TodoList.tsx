@@ -23,24 +23,33 @@ export const TodoList = () => {
     const [pageSize, setPageSize] = useState(10);
 
     useEffect(() => {
-        const fetchTodos = async () => {
-            const data = await getTodos();
-            console.log("fetched todos", data);
-            setTodos(data);
-            setLoading(false);
-        };
         fetchTodos();
     }, []);
 
-    if (loading) return <p>Loading...</p>;
+    const fetchTodos = async () => {
+        try {
+            setLoading(true);
+            const data = await getTodos();
+            console.log("fetched todos", data);
+            setTodos(data);
+        } catch (error) {
+            console.error("Error fetching todos:", error);
+            alert("Failed to load todos");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // if (loading) return <p>Loading...</p>;
 
     const handleDelete = async (id: string) => {
-        console.log("Deleting todo with id:", id);  // Debugging log
+        console.log("Deleting todo with id:", id);
         try {
             await deleteTodo(id);
-            setTodos(todos.filter(todo => todo.id !== id)); // Remove from state
+            // Update state after successful API call
+            setTodos(prevTodos => prevTodos.filter(todo => todo.id !== id));
         } catch (err) {
-            console.log("handle delete error", err);
+            console.error("Delete error:", err);
             alert("Error deleting todo");
         }
     };
@@ -48,27 +57,49 @@ export const TodoList = () => {
     const handleEdit = (todo: Todo) => {
         setEditingTodo(todo);
         setIsEditing(true);
-        form.setFieldsValue(todo); // Pre-fill the form with the current todo data
+        // Reset form and then set values to avoid stale data
+        form.resetFields();
+        form.setFieldsValue({
+            title: todo.title,
+            description: todo.description,
+            deadline: todo.deadline,
+            priority: todo.priority,
+            completed: todo.completed
+        });
     };
 
     const handleEditSubmit = async (values: any) => {
-        if (editingTodo) {
-            try {
-                const updatedTodo = { ...editingTodo, ...values };
-                await updateTodo(updatedTodo.id, updatedTodo); // Call the update API function
-                setTodos(todos.map(todo => (todo.id === updatedTodo.id ? updatedTodo : todo))); // Update todo list
-                setIsEditing(false); // Close modal
-                setEditingTodo(null); // Reset editingTodo
-            } catch (err) {
-                console.log("handleEditSubmit error", err);
-                alert("Error updating todo");
-            }
+        if (!editingTodo) return;
+
+        try {
+            const updatedTodo = {
+                ...editingTodo,
+                ...values,
+                // Ensure completed status is preserved if not included in the form
+                completed: values.completed !== undefined ? values.completed : editingTodo.completed
+            };
+
+            await updateTodo(updatedTodo.id, updatedTodo);
+
+            // Update state after successful API call
+            setTodos(prevTodos =>
+                prevTodos.map(todo =>
+                    todo.id === updatedTodo.id ? updatedTodo : todo
+                )
+            );
+
+            // Reset state and close modal
+            setIsEditing(false);
+            setEditingTodo(null);
+        } catch (err) {
+            console.error("Update error:", err);
+            alert("Error updating todo");
         }
     };
 
     const columns = [
         {
-            title: "ID",
+            title: "#",
             key: "index",
             render: (_text, _record, index) => (currentPage - 1) * pageSize + index + 1,
         },
@@ -91,12 +122,25 @@ export const TodoList = () => {
             title: "Priority",
             dataIndex: "priority",
             key: "priority",
+            render: (priority: string) => (
+                <span className={`
+                    ${priority === 'high' ? 'text-red-500' : ''}
+                    ${priority === 'medium' ? 'text-yellow-500' : ''}
+                    ${priority === 'low' ? 'text-green-500' : ''}
+                `}>
+                    {priority.charAt(0).toUpperCase() + priority.slice(1)}
+                </span>
+            )
         },
         {
             title: "Status",
             dataIndex: "completed",
             key: "completed",
-            render: (completed: boolean) => (completed ? "Completed" : "Pending")
+            render: (completed: boolean) => (
+                <span className={completed ? "text-green-500" : "text-red-500"}>
+                    {completed ? "Completed" : "Pending"}
+                </span>
+            )
         },
         {
             title: "Actions",
@@ -104,8 +148,18 @@ export const TodoList = () => {
             key: "actions",
             render: (_: any, record: Todo) => (
                 <div className="flex gap-2">
-                    <Button danger onClick={() => handleDelete(record.id)}>Delete</Button>
-                    <Button type="primary" onClick={() => handleEdit(record)}>Edit</Button>
+                    <Button
+                        danger
+                        onClick={() => handleDelete(record.id)}
+                    >
+                        Delete
+                    </Button>
+                    <button
+                        className="bg-gray-700 text-white px-4 py-1 rounded hover:bg-gray-800"
+                        onClick={() => handleEdit(record)}
+                    >
+                        Edit
+                    </button>
                 </div>
             ),
         }
@@ -114,19 +168,29 @@ export const TodoList = () => {
     return (
         <>
             <div className="w-full p-4 rounded-lg">
-                <h1 className="text-center text-2xl">To-Do List</h1>
-                {todos.length === 0 ? (
-                    <p>No todos to display</p>
-                ) : (
-                    <Table columns={columns} dataSource={todos} rowKey="id"   pagination={{
-                        current: currentPage,
-                        pageSize: pageSize,
-                        onChange: (page, pageSize) => {
-                            setCurrentPage(page);
-                            setPageSize(pageSize);
-                        },
-                    }} />
-                )}
+                <h1 className="text-center text-xl font-bold mb-4">To-Do List</h1>
+                <div className="p-4">
+                    {todos.length === 0 ? (
+                       <Table columns={columns} loading={loading} />
+                    ) : (
+
+                        <Table
+                            loading={loading}
+                            columns={columns}
+                            dataSource={todos}
+                            rowKey="id"
+                            pagination={{
+                                current: currentPage,
+                                pageSize: pageSize,
+                                onChange: (page, pageSize) => {
+                                    setCurrentPage(page);
+                                    setPageSize(pageSize);
+                                },
+                            }}
+                            scroll={{ x: 170 }}
+                        />
+                    )}
+                </div>
             </div>
 
             <Modal
@@ -134,25 +198,27 @@ export const TodoList = () => {
                 open={isEditing}
                 footer={null}
                 onCancel={() => setIsEditing(false)}
+                destroyOnClose={true}
             >
                 <Form
                     layout="vertical"
                     onFinish={handleEditSubmit}
                     form={form}
                     className="grid grid-cols-2 gap-4"
+                    preserve={false}
                 >
                     <Form.Item
                         label="Title"
                         name="title"
                         rules={[{ required: true, message: 'Please input a title' }]}
                     >
-                        <Input placeholder="Title...." />
+                        <Input placeholder="Title..." />
                     </Form.Item>
                     <Form.Item
                         label="Description"
                         name="description"
                     >
-                        <Input placeholder="Description...." />
+                        <Input placeholder="Description..." />
                     </Form.Item>
                     <Form.Item
                         label="Deadline"
@@ -170,6 +236,17 @@ export const TodoList = () => {
                             <Option value="low">Low</Option>
                             <Option value="medium">Medium</Option>
                             <Option value="high">High</Option>
+                        </Select>
+                    </Form.Item>
+                    <Form.Item
+                        label="Status"
+                        name="completed"
+                        valuePropName="checked"
+                        className="col-span-2"
+                    >
+                        <Select>
+                            <Option value={false}>Pending</Option>
+                            <Option value={true}>Completed</Option>
                         </Select>
                     </Form.Item>
                     <Form.Item className="col-start-2 justify-self-end">
